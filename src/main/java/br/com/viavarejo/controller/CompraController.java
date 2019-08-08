@@ -24,7 +24,7 @@ public class CompraController {
 
 	@ApiOperation(value = "Criar uma nova compra")
 	@PostMapping(value = "/compra", produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
-	public ResponseEntity<List<Parcela>> get(@RequestBody Compra compra) {
+	public ResponseEntity<List<Parcela>> create(@RequestBody Compra compra) {
 		return ResponseEntity.ok(compraService.processaCompra(compra));
 	}
 
