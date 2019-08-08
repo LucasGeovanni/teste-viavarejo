@@ -1,8 +1,6 @@
 package br.com.viavarejo;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import org.junit.Assert;
@@ -23,16 +21,8 @@ import br.com.viavarejo.service.ICompraService;
 @SpringBootTest
 public class TesteViaVarejoApplicationTests {
 
-	private DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-
 	@Autowired
 	ICompraService compraService;
-
-	@Test
-	public void montarDataDeHoje() {
-		String hoje = LocalDate.now().format(formatter);
-		Assert.assertEquals(hoje, compraService.dataHoje());
-	}
 
 	@Test
 	public void taxaParcela() {

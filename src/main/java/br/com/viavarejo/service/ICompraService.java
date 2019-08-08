@@ -13,8 +13,6 @@ public interface ICompraService {
 
 	List<TaxaSelic> buscarTaxa(String dataInicial, String dataFinal);
 
-	String dataHoje();
-
 	BigDecimal aplicarTaxaParcela(BigDecimal valorParcela, BigDecimal taxaJuros);
 
 }
