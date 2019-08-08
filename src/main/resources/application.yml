@@ -1,0 +1,11 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: teste-viavarejo  
+  resources:
+    add-mappings: true  
+    
+url-selic: https://api.bcb.gov.br/dados/serie/bcdata.sgs.11/dados?formato=json
+
