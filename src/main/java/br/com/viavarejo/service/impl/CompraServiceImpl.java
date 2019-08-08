@@ -31,18 +31,17 @@ public class CompraServiceImpl implements ICompraService {
 		BigDecimal valorParcela = compra.getProduto().getValor().divide(new BigDecimal(qtdeParcelas));
 		BigDecimal taxaJuros = new BigDecimal("0");
 
-		String dataHoje = LocalDate.now().format(formatter);
-		String hojeMenos30Dias =  LocalDate.now().minusDays(30).format(formatter);
 
 		if (compra.getCondicaoPagamento().getQtdeParcelas() > 6) {
+			
+			String dataHoje = LocalDate.now().format(formatter);
+			String hojeMenos30Dias =  LocalDate.now().minusDays(30).format(formatter);
 			
 			taxaJuros = buscarTaxa(hojeMenos30Dias, dataHoje)
 								.stream()
 								.map(TaxaSelic::getValor)
 								.reduce(BigDecimal::add)
-								.orElse(taxaJuros);				
-			
-			System.out.println(taxaJuros);
+								.orElse(taxaJuros);							
 			
 			valorParcela = aplicarTaxaParcela(valorParcela, taxaJuros);
 		}
