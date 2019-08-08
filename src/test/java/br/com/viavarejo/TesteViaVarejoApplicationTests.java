@@ -1,6 +1,8 @@
 package br.com.viavarejo;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import org.junit.Assert;
@@ -21,6 +23,8 @@ import br.com.viavarejo.service.ICompraService;
 @SpringBootTest
 public class TesteViaVarejoApplicationTests {
 
+	private DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+	
 	@Autowired
 	ICompraService compraService;
 
@@ -32,13 +36,18 @@ public class TesteViaVarejoApplicationTests {
 
 	@Test
 	public void buscarTaxaSelic() {
-		String data = "01/12/2000";
-		BigDecimal valorTaxaEsperado = new BigDecimal("0.060281");
+		String dataHoje = LocalDate.now().format(formatter);
+		String hojeMenos30Dias =  LocalDate.now().minusDays(30).format(formatter);
+		
+		BigDecimal valorTaxaAtual = new BigDecimal("0");
+		
+		BigDecimal valorTaxaEsperado = new BigDecimal("0.532295");
 
-		BigDecimal valorTaxaAtual = compraService.buscarTaxa(data, data)
-												 .stream()
-												 .map(TaxaSelic::getValor)
-												 .findFirst().get();
+		valorTaxaAtual = compraService.buscarTaxa(hojeMenos30Dias, dataHoje)
+										  .stream()
+										  .map(TaxaSelic::getValor)
+										  .reduce(BigDecimal::add)
+										  .orElse(valorTaxaAtual);		
 		
 		Assert.assertEquals(valorTaxaEsperado, valorTaxaAtual);
 
@@ -47,15 +56,15 @@ public class TesteViaVarejoApplicationTests {
 	@Test
 	public void processaCompra() {
 		
-		Produto produto = new Produto(1L, "teste", new BigDecimal("950000.00"));
-		int qtdeParcelas = 8;
-		CondicaoPagamento condicaoPagamento = new CondicaoPagamento(new BigDecimal("750000.00"), qtdeParcelas);		
+		Produto produto = new Produto(1L, "teste", new BigDecimal("9999.99"));
+		int qtdeParcelas = 7;
+		CondicaoPagamento condicaoPagamento = new CondicaoPagamento(new BigDecimal("9999.99"), qtdeParcelas);		
 		Compra compra  = new Compra(produto, condicaoPagamento);	
 		
 		List<Parcela> parcelas = compraService.processaCompra(compra);
 		Assert.assertEquals(qtdeParcelas, parcelas.size());
-		Assert.assertEquals(new BigDecimal("0.022751"), parcelas.get(0).getTaxaJurosAoMes());
-		Assert.assertEquals(new BigDecimal("118777.01681250"), parcelas.get(0).getValor());
+		Assert.assertEquals(new BigDecimal("0.532295"), parcelas.get(0).getTaxaJurosAoMes());
+		Assert.assertEquals(new BigDecimal("1436.1742066815"), parcelas.get(0).getValor());
 	}
 
 }
