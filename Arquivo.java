@@ -1,156 +1,195 @@
 package br.edu.cruzeirodosul.webapps.canvas.bean;
 
 import br.edu.cruzeirodosul.models.academico.canvas.UsuarioCanvas;
-import br.edu.cruzeirodosul.models.academico.canvas.UsuarioOfertaCanvas;
 import br.edu.cruzeirodosul.models.academico.canvas.ArquivoCanvas;
-import br.edu.cruzeirodosul.models.academico.canvas.DisciplinaCanvas;
-import br.edu.cruzeirodosul.models.academico.canvas.OfertaCanvas;
-import br.edu.cruzeirodosul.models.academico.canvas.UsuarioDadosCanvas;
-import java.util.LinkedList;
+import br.edu.cruzeirodosul.util.commons.mail.Email;
+import br.edu.cruzeirodosul.util.commons.mail.model.EmailModel;
+import br.edu.cruzeirodosul.webapps.webbase.ApplicationBase;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.log4j.Logger;
+import org.quartz.Job;
+import org.quartz.JobExecutionContext;
+import org.quartz.JobExecutionException;
+import org.springframework.web.context.support.SpringBeanAutowiringSupport;
+import br.edu.cruzeirodosul.models.academico.canvas.*;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import org.apache.commons.net.ftp.FTPFile;
 
 /**
 *
 * @author lgeovanni
 */
-public class GerarArquivoBean {
+public class EnviaArquivosCanvasBean extends ApplicationBase implements Job {
 
-private List<String[]> aluno;
-private List<String[]> alunoDados;
-private List<String[]> alunoCriptofrafia;
-private List<String[]> alunoOferta;
-private List<String[]> oferta;
-private List<String[]> disciplina;
-private List<String[]> professor;
-private List<String[]> professorOferta;
+private final static Logger logger = Logger.getLogger("canvas");
+private String fileName;
+private SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+private String now = sdf.format(new Date());
 
-private List<ArquivoCanvas> arquivos;
+@Override
+public void execute(JobExecutionContext jec) throws JobExecutionException {
+if (super.isExecute() || true) {
+// if (super.isExecute()) {
 
-public GerarArquivoBean(List<UsuarioCanvas> aluno, List<UsuarioOfertaCanvas> alunoOferta, List<UsuarioCanvas> professor, List<UsuarioOfertaCanvas> professorOferta, List<OfertaCanvas> oferta, List<DisciplinaCanvas> disciplina, List<UsuarioDadosCanvas> usuarioDados) {
-this.aluno = montarUsuario(aluno, false);
-this.professor = montarUsuario(professor, false);
-this.alunoCriptofrafia = montarUsuario(aluno, true);
-this.alunoOferta = montarUsuarioOferta(alunoOferta);
-this.professorOferta = montarUsuarioOferta(professorOferta);
-this.oferta = montarOferta(oferta);
-this.disciplina = montarDisciplina(disciplina);
-this.alunoDados = montarUsuarioDados(usuarioDados);
+try {
+SpringBeanAutowiringSupport.processInjectionBasedOnCurrentContext(this);
+
+List<UsuarioCanvas> alunos = new ArrayList<>();
+List<UsuarioCanvas> professor = new ArrayList<>();
+List<UsuarioOfertaCanvas> alunosOfertas = new ArrayList<>();
+List<UsuarioOfertaCanvas> professorOfertas = new ArrayList<>();
+List<UsuarioDadosCanvas> usuarioDados = new ArrayList<>();
+List<OfertaCanvas> ofertas = new ArrayList<>();
+List<DisciplinaCanvas> disciplinas = new ArrayList<>();
+
+alunos = super.canvasService.findAlunoCanvas();
+professor = super.canvasService.findProfessorCanvas();
+alunosOfertas = super.canvasService.findAlunoOfertaCanvas();
+professorOfertas = super.canvasService.findProfessorOfertaCanvas();
+usuarioDados = super.canvasService.findUsuarioDadosCanvas();
+ofertas = super.canvasService.findOfertaCanvas();
+disciplinas = super.canvasService.findDisciplinaCanvas();
+
+GerarArquivoBean ger = new GerarArquivoBean(alunos, alunosOfertas, professor, professorOfertas, ofertas, disciplinas, usuarioDados);
+
+ger.setArquivos(Arrays.asList(
+new ArquivoCanvas(ger.getAluno(), Arrays.asList("user_id,", "login_id,", "password,", "first_name,", "last_name,", "short_name,", "email,", "status\n"), "ALUNOS.csv"),
+new ArquivoCanvas(ger.getProfessor(), Arrays.asList("user_id,", "login_id,", "password,", "first_name,", "last_name,", "short_name,", "email,", "status\n"), "PROFESSORES.csv"),
+new ArquivoCanvas(ger.getAlunoCriptofrafia(), Arrays.asList("user_id,", "login_id,", "ssha_password,", "first_name,", "last_name,", "short_name,", "email,", "status\n"), "ALUNOS-CRIPTOGRAFIA.csv"),
+new ArquivoCanvas(ger.getAlunoOferta(), Arrays.asList("course_id,", "user_id,", "role,", "section_id,", "status\n"), "ALUNOS_X_OFERTAS.csv"),
+new ArquivoCanvas(ger.getProfessorOferta(), Arrays.asList("course_id,", "user_id,", "role,", "section_id,", "status\n"), "PROFESSORES_X_OFERTAS.csv"),
+new ArquivoCanvas(ger.getAlunoDados(), Arrays.asList("user_id,", "rgm_number,", "polo_number,", "course_name,", "doc_number\n"), "ALUNOS_DADOS.csv"),
+new ArquivoCanvas(ger.getOferta(), Arrays.asList("section_id,", "course_id,", "name,", "status\n"), "OFERTAS.csv"),
+new ArquivoCanvas(ger.getDisciplina(), Arrays.asList("course_id,", "short_name,", "long_name,", "status\n"), "DISCIPLINAS.csv")));
+InputStream x = zipFiles(ger.getArquivos());
+Thread.sleep(5000);
+sendFileFTP(x, 1);
+sendEmail("Arquivo gerado com sucesso! \r\n Nome do aquivo:" + fileName);
+} catch (Exception e) {
+System.out.println("######### FTP-CANVAS ########### ERRO: " + e.getMessage());
+sendEmail("Algo deu errado! \r\n MOTIVO: \r\n " + e.getMessage());
 }
-
-private List<String[]> montarUsuario(List<UsuarioCanvas> usuario, boolean cript) {
-List<String[]> dados = new LinkedList<String[]>();
-for (UsuarioCanvas x : usuario) {
-String password = cript ? CriptografarCanvas.SHA(x.getPassword()) : x.getPassword();
-dados.add(new String[]{
-x.getUserId(),
-x.getLoginId(),
-password,
-x.getFirstName(),
-x.getLastName(),
-x.getShortName(),
-x.getEmail(),
-x.getStatus()
-});
 }
-return dados;
-}
-
-private List<String[]> montarUsuarioOferta(List<UsuarioOfertaCanvas> usuarioOferta) {
-List<String[]> dados = new LinkedList<String[]>();
-for (UsuarioOfertaCanvas x : usuarioOferta) {
-dados.add(new String[]{
-x.getCourseId(),
-x.getUserId(),
-x.getRole(),
-x.getSectionId(),
-x.getStatus()
-});
-}
-return dados;
 }
 
-private List<String[]> montarOferta(List<OfertaCanvas> oferta) {
-List<String[]> dados = new LinkedList<String[]>();
-for (OfertaCanvas x : oferta) {
-dados.add(new String[]{
-x.getSectionId(),
-x.getCourseId(),
-x.getName(),
-x.getStatus()
-});
+private void sendEmail(String mensagem) {
+try {
+EmailModel emailModel = new EmailModel();
+emailModel.setAssunto("Arquivos Canvas " + now);
+emailModel.setDestinatarioEmail("fabio.silva@cruzeirodosul.edu.br");
+emailModel.setDestinatarioCC("canvas716@cruzeirodosul.edu.br");
+emailModel.setRemetenteEmail("sistemas@cruzeirodosul.edu.br");
+emailModel.setRemetenteNome("Sistema Integrado de Administra��o Acad�mica - Scheduler");
+emailModel.setTipo(2);
+emailModel.setMenssagem(mensagem);
+Email.sendMail(emailModel);
+} catch (Exception e) {
+System.out.println("########### Erro ao enviar o email! " + e.getMessage());
+e.printStackTrace();
 }
-return dados;
-}
-
-private List<String[]> montarDisciplina(List<DisciplinaCanvas> disciplina) {
-List<String[]> dados = new LinkedList<String[]>();
-for (DisciplinaCanvas x : disciplina) {
-dados.add(new String[]{
-x.getCourseId(),
-x.getShortName(),
-x.getLongName(),
-x.getStatus()
-});
-}
-return dados;
 }
 
-private List<String[]> montarUsuarioDados(List<UsuarioDadosCanvas> usuarioDados) {
-List<String[]> dados = new LinkedList<String[]>();
-for (UsuarioDadosCanvas x : usuarioDados) {
-dados.add(new String[]{
-x.getUserId(),
-x.getRgmNumber(),
-x.getPoloNumber(),
-x.getCourseName(),
-x.getDocNumber()
-});
+private void sendFileFTP(InputStream file, int attemps) throws IOException, InterruptedException {
+String host = "200.136.79.5", user = "canvas", password = "canvas2019#$!";
+try {
+FTPClient ftp = connectFTP(host, user, password);
+fileName = "CANVAS_" + now + ".zip";
+String path = "arquivos/" + fileName;
+
+ftp.storeFile(path, file);
+Thread.sleep(5000);
+
+FTPFile[] remoteFile = ftp.listFiles(path);
+if (remoteFile.length > 0) {
+ftp.logout();
+ftp.disconnect();
+} else {
+//Nova tentativa
+if (attemps < 2) {
+sendFileFTP(file, 2);
 }
-return dados;
+System.out.println("######### FTP-CANVAS ########### ARQUIVO N�O ENCONTRADO | TENTATIVA: " + attemps);
 }
 
-public void setArquivos(List<ArquivoCanvas> arquivos) {
-this.arquivos = arquivos;
+} catch (IOException ex) {
+System.out.println("######### FTP-CANVAS ########### ERRO: " + ex.getMessage());
+
+sendEmail("Algo deu errado! \r\n MOTIVO: \r\n " + ex.getMessage());
+}
 }
 
-public List<ArquivoCanvas> getArquivos() {
-return arquivos;
+private FTPClient connectFTP(String host, String user, String password) throws IOException {
+FTPClient ftp = new FTPClient();
+ftp.connect(host);
+ftp.login(user, password);
+ftp.setFileType(org.apache.commons.net.ftp.FTP.BINARY_FILE_TYPE);
+return ftp;
 }
 
-public ArquivoCanvas montarArquivo(List<String[]> dados, List<String> cabecalho, String nome) {
-return new ArquivoCanvas(dados, cabecalho, nome);
+private byte[] genCsvBytes(List<String[]> dados, List<String> cabecalho) {
+ByteArrayOutputStream baos = new ByteArrayOutputStream();
+String quebraLinha = "\r\n";
+try {
+for (String c : cabecalho) {
+baos.write((c).getBytes());
+}
+for (int i = 0; i < dados.size(); i++) {
+String[] linha = dados.get(i);
+for (int j = 0; j < linha.length; j++) {
+byte[] x = linha[j] == null ? ("").getBytes() : linha[j].getBytes();
+baos.write(x);
+if (j < linha.length - 1) {
+baos.write(',');
+}
+}
+baos.write(quebraLinha.getBytes());
+}
+baos.flush();
+baos.close();
+} catch (IOException ex) {
+System.out.println("Erro ao gerar os bytes " + ex.getMessage());
+ex.getStackTrace();
+}
+return baos.toByteArray();
 }
 
-public List<String[]> getAluno() {
-return aluno;
+private InputStream zipFiles(List<ArquivoCanvas> files) throws IOException {
+ByteArrayOutputStream out = new ByteArrayOutputStream();
+ZipOutputStream zos = new ZipOutputStream(out, StandardCharsets.UTF_8);
+Charset charset = Charset.forName("utf-8");
+try {
+for (int i = 0; i < files.size(); i++) {
+String fileName = files.get(i).getNome();
+ArquivoCanvas arquivo = files.get(i);
+byte dados[] = genCsvBytes(arquivo.getDado(), arquivo.getCabecalho());
+dados = charset.encode(new String(dados)).array();
+ZipEntry zipEntry = new ZipEntry(fileName);
+zipEntry.setSize(dados.length);
+zos.putNextEntry(zipEntry);
+zos.write(dados);
+zos.closeEntry();
+}
+zos.flush();
+zos.close();
+
+} catch (IOException e) {
+System.out.println("######### FTP-CANVAS ########### ERRO: " + e.getMessage());
+e.getStackTrace();
 }
 
-public List<String[]> getAlunoCriptofrafia() {
-return alunoCriptofrafia;
-}
-
-public List<String[]> getAlunoOferta() {
-return alunoOferta;
-}
-
-public List<String[]> getOferta() {
-return oferta;
-}
-
-public List<String[]> getDisciplina() {
-return disciplina;
-}
-
-public List<String[]> getAlunoDados() {
-return alunoDados;
-}
-
-public List<String[]> getProfessorOferta() {
-return professorOferta;
-}
-
-public List<String[]> getProfessor() {
-return professor;
+return new ByteArrayInputStream(out.toByteArray());
 }
 
 }
